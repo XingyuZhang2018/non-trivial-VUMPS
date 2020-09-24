@@ -2,24 +2,34 @@ using Random, Statistics, ProgressMeter
 
 #J1-J2-checkboard
 function e_dif( array, lattice, x, y, r)
-    a , b = mod(x,2), mod(y,2)
+    a , b = mod(x,3), mod(y,3)
     
-    top     = array[x,y - 1 + lattice * (y==1)] 
-    bottom  = array[x, y + 1 - lattice * (y==lattice)] 
+    top     = array[x, y + 1 - lattice * (y==lattice)] 
+    bottom  = array[x,y - 1 + lattice * (y==1)] 
     left    = array[x - 1 + lattice * (x==1), y]
     right   = array[x + 1 - lattice * (x==lattice), y]
-    
-    if a==1
-        right *= r
-    else 
-        left *= r
+
+    if a == 1
+        if b == 2
+            right *= r
+        end
+    elseif a == 2
+        if b == 1
+            top *= r
+        elseif b == 2
+            top *= r 
+            bottom *= r
+            left *= r
+            right *= r
+        else
+            bottom *= r
+        end
+    else
+        if b == 2
+            left *= r 
+        end
     end
-    if b==1
-        bottom *= r
-    else 
-        top *= r
-    end
-    
+        
     return 2 * array[x, y] * (top+bottom+left+right)
 end
 
@@ -56,13 +66,13 @@ function MC(lattice,β,r,Sweeps_heat,Sweeps)
     end
 #     mag = zeros(1,Sweeps);
     ene = zeros(1,Sweeps)
-    Threads.@threads for j = 1:Sweeps
+    for j = 1:Sweeps
         spin_array = onestep!(spin_array,lattice ,β,r)
 #         mag[j] = abs(sum(spin_array)/lattice^2)
         ene[j] = energy(spin_array, lattice,r)/lattice^2
     end
 #     mag_ave = sum(mag)/Sweeps;
-    ene_ave = sum(ene)/Sweeps;
+    ene_ave = mean(ene)
     return ene_ave
 end 
 

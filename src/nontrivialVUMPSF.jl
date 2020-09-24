@@ -178,7 +178,7 @@ function FRmap3(ARi,ARip, Mi, FR,J)
     X = Array{Array,1}(undef, Nj+1)
     X[1] = FR
     for j=1:Nj
-        jr = J-(j-1) + (J-(j-1) < 1)*Nj
+        jr = J + Nj - j - (J + Nj - j > Nj) * Nj
         @tensor X[j+1][α,a,β] := ARi[jr][α,s',α']*X[j][α',a',β']*Mi[jr][a,s,a',s']*conj(ARip[jr][β,s,β'])
     end
     return X[Nj+1]
@@ -201,7 +201,7 @@ function FRmap4(ARi, ARip, Mi, Mip, FR, J)
     X = Array{Array,1}(undef, Nj+1)
     X[1] = FR
     for j=1:Nj
-        jr = J-(j-1) + (J-(j-1) < 1)*Nj
+        jr = J + Nj - j - (J + Nj - j > Nj) * Nj
         @tensor X[j+1][α,a,b,β] := ARi[jr][α,s',α']*X[j][α',a',b',β']*Mi[jr][a,s,a',s']*
             Mip[jr][b,c,b',s]*conj(ARip[jr][β,c,β'])
     end
@@ -247,17 +247,6 @@ function env3(AL,AR, M, FL = F3int(size(AL,1),size(AL,2),size(AL[1,1],1),size(M[
     return FL,FR,λFL,λFR
 end
 
-function env3vumps(AL,ALp,AR,ARp, M,FL,FR,i; kwargs...)
-    Nj = size(AL,1)
-    for j=1:Nj
-        _, FL1s, = eigsolve(X->FLmap3(AL, ALp, M, X,j), FL[i,j], 1, :LM; ishermitian = false, kwargs...)
-        FL[i,j] = FL1s[1]
-        _, FR1s, = eigsolve(X->FRmap3(AR, ARp, M, X,j), FR[i,j], 1, :LM; ishermitian = false, kwargs...)
-        FR[i,j] = FR1s[1]
-    end
-    return FL,FR
-end
-
 function env4(AL,AR, M, FL = F4int(size(AL,1),size(AL,2),size(AL[1,1],1),size(M[1,1],1)),
                     FR = F4int(size(AR,1),size(AR,2),size(AR[1,1],1),size(M[1,1],1)); kwargs...)
     Ni,Nj = size(AL)
@@ -277,13 +266,13 @@ function env4(AL,AR, M, FL = F4int(size(AL,1),size(AL,2),size(AL[1,1],1),size(M[
 end
 
 # vumps
-function applyH1(ACij, FLj, FRj, Mj, II)
+function applyH1(ACij, FLj, FRjp, Mj, II)
     Ni = size(FLj,1)
     X = Array{Array,1}(undef, Ni+1)
     X[1] = ACij
     for i=1:Ni
         ir = II+i-1 - (II+i-1 > Ni)*Ni
-        @tensor X[i+1][α,s,β] := FLj[ir][α,a,α']*X[i][α',s',β']*Mj[ir][a,s,b,s']*FRj[ir][β',b,β]
+        @tensor X[i+1][α,s,β] := FLj[ir][α,a,α']*X[i][α',s',β']*Mj[ir][a,s,b,s']*FRjp[ir][β',b,β]
     end
     return X[Ni+1]
 end
@@ -316,8 +305,8 @@ function vumpsstep(AL,C,FL3,FR3,M;kwargs...)
     for i = 1:Ni,j = 1:Nj
         @tensor AC[i,j][a,s,b] := AL[i,j][a,s,c] * C[i,j][c, b]
         jr = j + 1 - (j==Nj) * Nj
-        μACs, ACs, = eigsolve(X->applyH1(X, FL3[:,j], FR3[:,j], M[:,j], i), AC[i,j], 1, :LM; ishermitian = false, kwargs...)
-        μCs, Cs, = eigsolve(X->applyH0(X, FL3[:,jr], FR3[:,j], i), C[i,j], 1, :LM; ishermitian = false, kwargs...)
+        μACs, ACs, = eigsolve(X->applyH1(X, FL3[:,j], FR3[:,jr], M[:,j], i), AC[i,j], 1, :LM; ishermitian = false, kwargs...)
+        μCs, Cs, = eigsolve(X->applyH0(X, FL3[:,jr], FR3[:,jr], i), C[i,j], 1, :LM; ishermitian = false, kwargs...)
         λ[i,j] = μACs[1]/μCs[1]
         AC[i,j] = ACs[1]
         C[i,j] = Cs[1]
@@ -338,40 +327,14 @@ function vumpsstep(AL,C,FL3,FR3,M;kwargs...)
     return λ, AL, C, AR, errL, errR
 end
     
-function vumpsrowstep!(AL,C,AR,FL3,FR3,M,i;kwargs...)
-    Nj = size(AL,2)
-    D,d, = size(AL[1,1])
-    AC = Array{Array,1}(undef,Nj)
-    
-    for j = 1:Nj
-        @tensor AC[j][a,s,b] := AL[i,j][a,s,c] * C[i,j][c, b]
-        jr = j + 1 - (j==Nj) * Nj
-        _, ACs, = eigsolve(X->applyH1(X, FL3[:,j], FR3[:,j], M[:,j], i), AC[j], 1, :LM; ishermitian = false, kwargs...)
-        _, Cs, = eigsolve(X->applyH0(X, FL3[:,jr], FR3[:,j], i), C[i,j], 1, :LM; ishermitian = false, kwargs...)
-        AC[j] = ACs[1]
-        C[i,j] = Cs[1]
-
-        QAC, RAC = qrpos(reshape(AC[j],(D*d, D)))
-        QC, RC = qrpos(C[i,j])
-        AL[i,j] = reshape(QAC*QC', (D, d, D))
-    end
-    
-    for j=1:Nj
-        jr = j - 1 + (j==1)*Nj
-        LAC, QAC = lqpos(reshape(AC[j],(D, d*D)))
-        LC, QC = lqpos(C[i,jr])
-        AR[i,j] = reshape(QC'*QAC, (D, d, D))
-    end
-    return AL, C, AR
-end
-
 function erro(AL,C,FL3,FR3,M)
     Ni,Nj = size(AL)
     AC = Array{Array,2}(undef, Ni,Nj)
     err = 0
     for i = 1:Ni,j = 1:Nj
+        jr = j + 1 - (j==Nj) * Nj
         @tensor AC[i,j][a,s,b] := AL[i,j][a,s,c] * C[i,j][c, b]
-        MAC = applyH1(AC[i,j], FL3[:,j], FR3[:,j], M[:,j], i)
+        MAC = applyH1(AC[i,j], FL3[:,j], FR3[:,jr], M[:,j], i)
         @tensor MAC[a,s,b] -= AL[i,j][a,s,b']*(conj(AL[i,j][a',s',b'])*MAC[a',s',b])
         err += norm(MAC)
     end
@@ -399,51 +362,19 @@ function vumps(A, M;verbose = false, tol = 1e-6, maxiter = 100, kwargs...)
     # Convergence measure: norm of the projection of the residual onto the tangent space
     err = erro(AL,C,FL3,FR3,M)
     
-    iter = 1
+    i = 1
 #     λ =  λ1 * λ2
-    verbose && println("Step $iter: err ≈ $err")
+    verbose && println("Step $i: err ≈ $err")
 
-    while err > tol && iter < maxiter
+    while err > tol && i < maxiter
         λ, AL, C, AR, errL, errR = vumpsstep(AL,C,FL3,FR3,M;tol = tol/10,kwargs...)
         FL3,FR3,λFL3,λFR3 = env3(AL,AR, M, FL3, FR3; tol = tol/10, kwargs...)
-#         for i = 1:Ni
-#             ir = i+1 - (i==Ni)*Ni
-#             AL, C, AR = vumpsrowstep!(AL,C,AR,FL3,FR3,M,i;tol = tol/10, kwargs...)
-#             AL, C, AR = vumpsrowstep!(AL,C,AR,FL3,FR3,M,ir;tol = tol/10, kwargs...)
-#             FL3,FR3 = env3vumps(AL[i,:],AL[ir,:],AR[i,:],AR[ir,:],M[i,:], FL3, FR3,i; tol = tol/10, kwargs...)
-#         end
 #         FR1 ./= @tensor scalar(FL2[c,b,a]*C1[a,a']*conj(C1[c,c'])*FR1[a',b,c']) 
 #         FR2 ./= @tensor scalar(FL1[c,b,a]*C2[a,a']*conj(C2[c,c'])*FR2[a',b,c']) # normalize FL and FR: not really necessary
         err = erro(AL,C,FL3,FR3,M)
-        iter += 1
+        i += 1
 #         λ =  λ1 * λ2
-        verbose && println("Step $iter: err ≈ $err")
-    end
-    FL4,FR4,λFL4,λFR4 = env4(AL,AR, M; tol = tol/10, kwargs...)
-    return λ, AL, C, AR, FL3, FR3, FL4, FR4
-end
-
-function vumpscon(AL, C, AR, FL3, FR3, M;verbose = false, tol = 1e-6, maxiter = 100, kwargs...)
-    err = erro(AL,C,FL3,FR3,M)
-    iter = 1
-#     λ =  λ1 * λ2
-    verbose && println("Step $iter: err ≈ $err")
-
-    while err > tol && iter < maxiter
-        λ, AL, C, AR, errL, errR = vumpsstep(AL,C,FL3,FR3,M;tol = tol/10,kwargs...)
-        FL3,FR3,λFL3,λFR3 = env3(AL,AR, M, FL3, FR3; tol = tol/10, kwargs...)
-#         for i = 1:Ni
-#             ir = i+1 - (i==Ni)*Ni
-#             AL, C, AR = vumpsrowstep!(AL,C,AR,FL3,FR3,M,i;tol = tol/10, kwargs...)
-#             AL, C, AR = vumpsrowstep!(AL,C,AR,FL3,FR3,M,ir;tol = tol/10, kwargs...)
-#             FL3,FR3 = env3vumps(AL[i,:],AL[ir,:],AR[i,:],AR[ir,:],M[i,:], FL3, FR3,i; tol = tol/10, kwargs...)
-#         end
-#         FR1 ./= @tensor scalar(FL2[c,b,a]*C1[a,a']*conj(C1[c,c'])*FR1[a',b,c']) 
-#         FR2 ./= @tensor scalar(FL1[c,b,a]*C2[a,a']*conj(C2[c,c'])*FR2[a',b,c']) # normalize FL and FR: not really necessary
-        err = erro(AL,C,FL3,FR3,M)
-        iter += 1
-#         λ =  λ1 * λ2
-        verbose && println("Step $iter: err ≈ $err")
+        verbose && println("Step $i: err ≈ $err")
     end
     FL4,FR4,λFL4,λFR4 = env4(AL,AR, M; tol = tol/10, kwargs...)
     return λ, AL, C, AR, FL3, FR3, FL4, FR4

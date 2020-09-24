@@ -1,7 +1,7 @@
 using Test
 
-@testset "M,Me" begin
-    include("M,ME.jl")
+@testset "3x3M,Me" begin
+    include("3x3M,ME.jl")
 end
 
 @testset "test orth" begin
@@ -12,14 +12,6 @@ end
     include("env.jl")
 end
 
-@testset "energy" begin
-    include("ene.jl")
-end
-
 @testset "vumpsstep" begin
     include("vumpsstep.jl")
-end
-
-@testset "r=1" begin
-    include("r=1.jl")
 end

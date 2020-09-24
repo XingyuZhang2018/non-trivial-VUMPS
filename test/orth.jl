@@ -2,7 +2,7 @@ using Test
 using Random
 using TensorOperations
 
-include("nontrivialVUMPS.jl") 
+include("../src/nontrivialVUMPS.jl") 
 
 @testset "orth  with ($Ni $Nj)" for Ni in [1,2,3], Nj in [1,2,3]
     D = 10

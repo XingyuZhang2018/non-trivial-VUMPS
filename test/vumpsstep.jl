@@ -1,12 +1,10 @@
 using Test
 
-include("nontrivialVUMPS.jl")
+include("../src/nontrivialVUMPS.jl") 
 
-@testset "vumpsstep" begin
+@testset "vumpsstep" for Ni = [2,3],Nj = [2,3]
     β = 0.1
     M, ME,λM,λME= classicalisingmpo(β; r = 1.0)
-    Ni = 2
-    Nj = 2
     D = 50
     A = Array{Array,2}(undef, Ni, Nj)
     for i = 1:Ni,j = 1:Nj

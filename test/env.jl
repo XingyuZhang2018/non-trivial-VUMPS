@@ -1,8 +1,9 @@
 using Test
 
-include("nontrivialVUMPS.jl")
+include("../src/nontrivialVUMPS.jl") 
+include("../src/3x3mpo.jl")
 
-@testset "environment  with (Ni,Nj)=($Ni $Nj)" for Ni in [1,2], Nj in [1,2]
+@testset "environment  with (Ni,Nj)=($Ni $Nj)" for Ni in [1,2,3], Nj in [1,2,3]
     β = 0.1
     M, ME,λM,λME= classicalisingmpo(β; r = 1.0)
     D = 10
